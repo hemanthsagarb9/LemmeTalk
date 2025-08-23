@@ -14,7 +14,12 @@ import os
 class WorkflowDependencies:
     """Dependencies shared across all workflows."""
     user_id: str = "default"
+    conversation_history: list = None
     # Add more shared dependencies as needed
+    
+    def __post_init__(self):
+        if self.conversation_history is None:
+            self.conversation_history = []
 
 class WorkflowOutput(BaseModel):
     """Base output model for all workflows."""
@@ -99,12 +104,84 @@ class WorkflowManager:
                 except Exception as e:
                     print(f"Failed to load workflow {module_name}: {e}")
     
-    def get_workflow_for_input(self, user_input: str) -> Optional[BaseWorkflow]:
-        """Find the best workflow for the given input."""
+    async def get_workflow_for_input(self, user_input: str, conversation_history: list = None) -> Optional[BaseWorkflow]:
+        """Find the best workflow for the given input using OpenAI."""
+        if not self.workflows:
+            return None
+        
+        # Create a list of available workflows for OpenAI to choose from
+        workflow_options = []
         for workflow in self.workflows.values():
-            if workflow.can_handle(user_input):
-                return workflow
-        return None
+            workflow_options.append({
+                "name": workflow.name,
+                "description": workflow.description,
+                "triggers": workflow.triggers
+            })
+        
+        # Use OpenAI to determine the best workflow
+        from openai import OpenAI
+        import os
+        
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        
+        # Build context from conversation history
+        context = ""
+        if conversation_history and len(conversation_history) > 0:
+            recent_messages = conversation_history[-4:]  # Last 2 exchanges
+            context = f"\nRecent conversation context:\n"
+            for msg in recent_messages:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                context += f"{role}: {content}\n"
+        
+        system_prompt = f"""You are a workflow router for a voice assistant. Your job is to determine which workflow should handle the user's request.
+
+Available workflows:
+{chr(10).join([f"- {w['name']}: {w['description']} (triggers: {', '.join(w['triggers'])})" for w in workflow_options])}
+
+{context}
+
+Respond with ONLY the workflow name that best matches the user's request. If no workflow matches, respond with "general".
+
+Examples:
+- User: "add milk to my shopping list" → ShoppingWorkflow
+- User: "remind me to call mom" → RemindersWorkflow  
+- User: "read me the news" → NewsWorkflow
+- User: "what's the weather" → WeatherWorkflow
+- User: "tell me a joke" → general
+- User: "I don't understand fan height, we use Celsius" → WeatherWorkflow (follow-up about weather)
+"""
+
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"User request: {user_input}"}
+                ],
+                max_tokens=10,
+                temperature=0
+            )
+            
+            selected_workflow = response.choices[0].message.content.strip()
+            
+            if selected_workflow == "general":
+                return None
+            
+            # Find the workflow by name
+            for workflow in self.workflows.values():
+                if workflow.name == selected_workflow:
+                    return workflow
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error in workflow routing: {e}")
+            # Fallback to keyword matching
+            for workflow in self.workflows.values():
+                if workflow.can_handle(user_input):
+                    return workflow
+            return None
     
     def list_workflows(self) -> List[str]:
         """List all available workflows."""

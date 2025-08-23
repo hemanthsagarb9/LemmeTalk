@@ -35,17 +35,33 @@ class WeatherWorkflow(BaseWorkflow):
                 "provide helpful information in a natural, conversational way. "
                 "If you don't have real weather data, give a friendly response "
                 "suggesting they check a weather app. Keep responses concise "
-                "and suitable for voice output."
+                "and suitable for voice output. "
+                "IMPORTANT: Use the conversation history to understand context. "
+                "If someone asks about temperature units (Celsius/Fahrenheit), "
+                "remember their preference and use it in future responses."
             )
         )
         
         @self.agent.tool
         async def get_weather(ctx: RunContext[WorkflowDependencies], location: str = "current") -> WeatherInfo:
             """Get weather information for a location."""
+            # Check conversation history for temperature unit preference
+            use_celsius = False
+            if ctx.deps.conversation_history:
+                for msg in ctx.deps.conversation_history:
+                    if "celsius" in msg.get("content", "").lower():
+                        use_celsius = True
+                        break
+            
             # This is a mock implementation
             # In a real app, you'd integrate with a weather API like OpenWeatherMap
+            temp_f = 72
+            temp_c = int((temp_f - 32) * 5/9)
+            
+            temperature = f"{temp_c}°C" if use_celsius else f"{temp_f}°F"
+            
             return WeatherInfo(
-                temperature="72°F",
+                temperature=temperature,
                 condition="Partly cloudy",
                 location=location if location != "current" else "your area"
             )

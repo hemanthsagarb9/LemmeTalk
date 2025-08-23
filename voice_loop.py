@@ -95,8 +95,9 @@ def transcribe(path: str) -> str:
     text = " ".join([seg.text for seg in segments]).strip()
     return text
 
-# Initialize workflow manager
+# Initialize workflow manager and conversation history
 workflow_manager = WorkflowManager()
+conversation_history = []
 
 def clean_text_for_tts(text: str) -> str:
     """Clean text to be more TTS-friendly."""
@@ -122,18 +123,53 @@ async def process_user_input(user_text: str) -> str:
     """Process user input using workflow system or fallback to general chat."""
     if not user_text: return ""
     
-    # Try to find a matching workflow
-    workflow = workflow_manager.get_workflow_for_input(user_text)
+    # Add user message to conversation history
+    conversation_history.append({"role": "user", "content": user_text})
+    
+    # Try to find a matching workflow using OpenAI with context
+    workflow = await workflow_manager.get_workflow_for_input(user_text, conversation_history)
     
     if workflow:
         print(f"🤖 Using workflow: {workflow.name}")
-        deps = WorkflowDependencies(user_id="default")
+        deps = WorkflowDependencies(user_id="default", conversation_history=conversation_history)
         result = await workflow.execute(user_text, deps)
-        return clean_text_for_tts(result.response)
+        response = clean_text_for_tts(result.response)
+        
+        # Add assistant response to conversation history
+        conversation_history.append({"role": "assistant", "content": response})
+        
+        # Limit conversation history to last 10 exchanges
+        if len(conversation_history) > 20:  # 10 exchanges (20 messages)
+            conversation_history[:] = conversation_history[-20:]
+        
+        return response
     else:
-        # Fallback to general conversation
+        # Fallback to general conversation with context
         print("🤖 Using general conversation")
-        return await general_chat(user_text)
+        response = await general_chat_with_context(user_text, conversation_history)
+        
+        # Add assistant response to conversation history
+        conversation_history.append({"role": "assistant", "content": response})
+        
+        # Limit conversation history
+        if len(conversation_history) > 20:
+            conversation_history[:] = conversation_history[-20:]
+        
+        return response
+
+async def general_chat_with_context(user_text: str, conversation_history: list) -> str:
+    """General conversation with conversation context."""
+    system_message = {
+        "role": "system", 
+        "content": "You are a friendly, conversational voice assistant optimized for text-to-speech. CRITICAL: Write exactly as you would speak to someone in person. NEVER use numbered lists, bullet points, or formatting symbols. Instead, use natural speech patterns like 'first', 'second', 'third', 'next', 'finally', 'also', 'additionally'. Convert all technical content into conversational speech. For example, instead of '1. Insert: O(log n)', say 'First, let's talk about insertion. This typically takes logarithmic time on average.' Avoid reading out any symbols, numbers, or formatting - just speak the content naturally and conversationally. IMPORTANT: Maintain context from the conversation history and respond appropriately to follow-up questions or clarifications."
+    }
+    
+    # Build messages with context
+    messages = [system_message] + conversation_history[-10:]  # Last 10 messages for context
+    
+    resp = client.chat.completions.create(model=OPENAI_MODEL, messages=messages)
+    response = resp.choices[0].message.content.strip()
+    return clean_text_for_tts(response)
 
 async def general_chat(user_text: str) -> str:
     """General conversation when no specific workflow matches."""
