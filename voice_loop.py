@@ -22,7 +22,8 @@ CHANNELS = 1
 print(f"Loading Whisper model: {WHISPER_SIZE}")
 model = WhisperModel(WHISPER_SIZE, compute_type="int8")  # efficient for CPU
 
-KOKORO_VOICE = os.getenv("KOKORO_SPEAKER", "af_sky")  # try: af_alloy, af_sky, af_nicole, am_michael
+KOKORO_VOICE = os.getenv("KOKORO_SPEAKER", "af_heart")  # try: af_heart, af_sky, af_alloy, af_nicole, am_michael
+KOKORO_SPEED = float(os.getenv("KOKORO_SPEED", "1.2"))  # 1.0 is normal, 1.2 is 20% faster
 kokoro_pipeline = KPipeline(lang_code="a") 
 
 def speak(text: str):
@@ -30,7 +31,7 @@ def speak(text: str):
         return
     try:
         # Kokoro returns a generator of (grapheme_seq, phoneme_seq, audio_np)
-        gen = kokoro_pipeline(text, voice=KOKORO_VOICE)
+        gen = kokoro_pipeline(text, voice=KOKORO_VOICE, speed=KOKORO_SPEED)
         # Stitch chunks and save a 24 kHz WAV
         audio_chunks = []
         for _, _, audio in gen:
@@ -96,7 +97,7 @@ def chat_llm(user_text: str) -> str:
     """Send text to LLM and get response."""
     if not user_text: return ""
     messages = [
-        {"role": "system", "content": "You are a concise voice assistant. Keep answers short."},
+        {"role": "system", "content": "You are a friendly, conversational voice assistant. Respond naturally as if speaking to someone in person. Use conversational language, natural pauses (indicated by commas), and clear pronunciation. Keep responses concise but warm and engaging. Avoid overly technical jargon unless specifically asked. Use contractions like 'you're', 'I'm', 'that's' to sound more natural when spoken aloud."},
         {"role": "user", "content": user_text}
     ]
     resp = client.chat.completions.create(model=OPENAI_MODEL, messages=messages)
