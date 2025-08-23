@@ -95,8 +95,28 @@ def transcribe(path: str) -> str:
 
 # Global conversation history
 conversation_history = [
-    {"role": "system", "content": "You are a friendly, conversational voice assistant. Respond naturally as if speaking to someone in person. Use conversational language, natural pauses (indicated by commas), and clear pronunciation. Keep responses concise but warm and engaging. Avoid overly technical jargon unless specifically asked. Use contractions like 'you're', 'I'm', 'that's' to sound more natural when spoken aloud."}
+    {"role": "system", "content": "You are a friendly, conversational voice assistant optimized for text-to-speech. CRITICAL: Write exactly as you would speak to someone in person. NEVER use numbered lists, bullet points, or formatting symbols. Instead, use natural speech patterns like 'first', 'second', 'third', 'next', 'finally', 'also', 'additionally'. Convert all technical content into conversational speech. For example, instead of '1. Insert: O(log n)', say 'First, let's talk about insertion. This typically takes logarithmic time on average.' Avoid reading out any symbols, numbers, or formatting - just speak the content naturally and conversationally."}
 ]
+
+def clean_text_for_tts(text: str) -> str:
+    """Clean text to be more TTS-friendly."""
+    import re
+    
+    # Remove numbered lists and convert to natural speech
+    text = re.sub(r'\d+\.\s*', '', text)  # Remove "1. ", "2. " etc.
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # Remove bold formatting
+    text = re.sub(r'\*([^*]+)\*', r'\1', text)  # Remove italic formatting
+    text = re.sub(r'`([^`]+)`', r'\1', text)  # Remove code formatting
+    
+    # Replace technical notation with spoken equivalents
+    text = re.sub(r'O\(([^)]+)\)', r'big O of \1', text)  # O(log n) -> big O of log n
+    text = re.sub(r'O\(', 'big O of ', text)  # Handle incomplete O() notation
+    
+    # Clean up multiple spaces and newlines
+    text = re.sub(r'\n+', ' ', text)  # Replace newlines with spaces
+    text = re.sub(r'\s+', ' ', text)  # Replace multiple spaces with single space
+    
+    return text.strip()
 
 def chat_llm(user_text: str) -> str:
     """Send text to LLM and get response with conversation history."""
@@ -112,6 +132,9 @@ def chat_llm(user_text: str) -> str:
     
     resp = client.chat.completions.create(model=OPENAI_MODEL, messages=conversation_history)
     assistant_response = resp.choices[0].message.content.strip()
+    
+    # Clean the response for TTS
+    assistant_response = clean_text_for_tts(assistant_response)
     
     # Add assistant response to history
     conversation_history.append({"role": "assistant", "content": assistant_response})
