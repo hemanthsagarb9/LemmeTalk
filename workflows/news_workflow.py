@@ -46,17 +46,15 @@ class NewsWorkflow(BaseWorkflow):
             deps_type=WorkflowDependencies,
             output_type=NewsOutput,
             system_prompt=(
-                "You are a podcast-style news reader for Hacker News. Create engaging, "
-                "conversational summaries of tech news articles. Write as if you're hosting "
-                "a tech news podcast. Use natural speech patterns, avoid reading numbers, "
-                "and make the content engaging for voice output. "
-                "Focus on the most interesting aspects of each story and provide context. "
-                "Keep each article summary concise but informative."
+                "You are a concise news reader for Hacker News. Create brief, "
+                "conversational summaries of tech news articles. Write naturally for voice output. "
+                "Keep summaries short and engaging - just the key points. "
+                "Avoid reading numbers and use natural speech patterns."
             )
         )
         
         @self.agent.tool
-        async def get_top_hn_articles_with_summaries(ctx: RunContext[WorkflowDependencies], count: int = 10) -> List[NewsArticle]:
+        async def get_top_hn_articles_with_summaries(ctx: RunContext[WorkflowDependencies], count: int = 5) -> List[NewsArticle]:
             """Fetch top Hacker News articles with content extraction and summaries."""
             async with httpx.AsyncClient(timeout=30.0) as client:
                 # Get top story IDs
@@ -80,8 +78,10 @@ class NewsWorkflow(BaseWorkflow):
                             author=story.get('by', 'Unknown')
                         )
                         
-                        # Extract content preview if it's a web article
-                        if article.url and not article.url.startswith('https://news.ycombinator.com'):
+                        # Extract content preview for external articles only
+                        if (article.url and 
+                            not article.url.startswith('https://news.ycombinator.com') and
+                            i <= 3):  # Only for first 3 articles to keep it fast
                             try:
                                 content_preview = await self._extract_article_content(client, article.url)
                                 article.content_preview = content_preview
@@ -110,7 +110,7 @@ class NewsWorkflow(BaseWorkflow):
             for i, article in enumerate(articles, 1):
                 data = f"Article {i}: {article.title}"
                 if article.content_preview:
-                    data += f" - Content: {article.content_preview[:200]}..."
+                    data += f" - Content: {article.content_preview[:100]}..."
                 if article.score > 0:
                     data += f" - Score: {article.score}"
                 article_data.append(data)
@@ -121,15 +121,14 @@ class NewsWorkflow(BaseWorkflow):
             
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             
-            prompt = f"""Create a podcast-style news summary for these Hacker News articles. 
-            Write as if you're hosting a tech news podcast. Use natural speech patterns, 
-            avoid reading numbers, and make it engaging for voice output.
+            prompt = f"""Create a brief news summary for these Hacker News articles. 
+            Write naturally for voice output. Keep it concise and engaging.
             
             Articles:
             {chr(10).join(article_data)}
             
-            Format the response as a conversational podcast intro and then cover each story briefly. 
-            Keep it engaging and natural for voice output."""
+            Give a brief intro and then cover each story in one or two sentences. 
+            Keep it short and conversational."""
             
             try:
                 response = client.chat.completions.create(
@@ -138,8 +137,8 @@ class NewsWorkflow(BaseWorkflow):
                         {"role": "system", "content": "You are a tech news podcast host. Create engaging, conversational summaries."},
                         {"role": "user", "content": prompt}
                     ],
-                    max_tokens=1000,
-                    temperature=0.7
+                    max_tokens=500,
+                    temperature=0.5
                 )
                 
                 return response.choices[0].message.content.strip()
@@ -186,8 +185,8 @@ class NewsWorkflow(BaseWorkflow):
                 text = content.get_text()
                 # Remove extra whitespace
                 text = re.sub(r'\s+', ' ', text).strip()
-                # Take first 300 characters
-                return text[:300] + "..." if len(text) > 300 else text
+                # Take first 150 characters for shorter summaries
+                return text[:150] + "..." if len(text) > 150 else text
             
             return ""
             
