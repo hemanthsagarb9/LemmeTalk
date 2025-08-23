@@ -5,6 +5,8 @@ import sounddevice as sd, soundfile as sf
 from faster_whisper import WhisperModel
 from dotenv import load_dotenv
 from openai import OpenAI
+import asyncio
+from workflows import WorkflowManager, WorkflowDependencies
 
 # --- Load config ---
 load_dotenv()
@@ -93,10 +95,8 @@ def transcribe(path: str) -> str:
     text = " ".join([seg.text for seg in segments]).strip()
     return text
 
-# Global conversation history
-conversation_history = [
-    {"role": "system", "content": "You are a friendly, conversational voice assistant optimized for text-to-speech. CRITICAL: Write exactly as you would speak to someone in person. NEVER use numbered lists, bullet points, or formatting symbols. Instead, use natural speech patterns like 'first', 'second', 'third', 'next', 'finally', 'also', 'additionally'. Convert all technical content into conversational speech. For example, instead of '1. Insert: O(log n)', say 'First, let's talk about insertion. This typically takes logarithmic time on average.' Avoid reading out any symbols, numbers, or formatting - just speak the content naturally and conversationally."}
-]
+# Initialize workflow manager
+workflow_manager = WorkflowManager()
 
 def clean_text_for_tts(text: str) -> str:
     """Clean text to be more TTS-friendly."""
@@ -118,31 +118,40 @@ def clean_text_for_tts(text: str) -> str:
     
     return text.strip()
 
-def chat_llm(user_text: str) -> str:
-    """Send text to LLM and get response with conversation history."""
+async def process_user_input(user_text: str) -> str:
+    """Process user input using workflow system or fallback to general chat."""
     if not user_text: return ""
     
-    # Add user message to history
-    conversation_history.append({"role": "user", "content": user_text})
+    # Try to find a matching workflow
+    workflow = workflow_manager.get_workflow_for_input(user_text)
     
-    # Limit history to last 5 exchanges (10 messages + system message) to prevent token overflow
-    if len(conversation_history) > 11:  # system + 5 exchanges (10 messages)
-        # Keep system message and last 5 exchanges
-        conversation_history[:] = [conversation_history[0]] + conversation_history[-10:]
-    
-    resp = client.chat.completions.create(model=OPENAI_MODEL, messages=conversation_history)
-    assistant_response = resp.choices[0].message.content.strip()
-    
-    # Clean the response for TTS
-    assistant_response = clean_text_for_tts(assistant_response)
-    
-    # Add assistant response to history
-    conversation_history.append({"role": "assistant", "content": assistant_response})
-    
-    return assistant_response
+    if workflow:
+        print(f"🤖 Using workflow: {workflow.name}")
+        deps = WorkflowDependencies(user_id="default")
+        result = await workflow.execute(user_text, deps)
+        return clean_text_for_tts(result.response)
+    else:
+        # Fallback to general conversation
+        print("🤖 Using general conversation")
+        return await general_chat(user_text)
 
-def main():
+async def general_chat(user_text: str) -> str:
+    """General conversation when no specific workflow matches."""
+    messages = [
+        {"role": "system", "content": "You are a friendly, conversational voice assistant optimized for text-to-speech. CRITICAL: Write exactly as you would speak to someone in person. NEVER use numbered lists, bullet points, or formatting symbols. Instead, use natural speech patterns like 'first', 'second', 'third', 'next', 'finally', 'also', 'additionally'. Convert all technical content into conversational speech. For example, instead of '1. Insert: O(log n)', say 'First, let's talk about insertion. This typically takes logarithmic time on average.' Avoid reading out any symbols, numbers, or formatting - just speak the content naturally and conversationally."},
+        {"role": "user", "content": user_text}
+    ]
+    
+    resp = client.chat.completions.create(model=OPENAI_MODEL, messages=messages)
+    response = resp.choices[0].message.content.strip()
+    return clean_text_for_tts(response)
+
+async def main():
     print("🎤 Local Voice Assistant ready. Ctrl+C to quit.")
+    print("📋 Available workflows:")
+    for workflow_info in workflow_manager.list_workflows():
+        print(f"   • {workflow_info}")
+    
     while True:
         try:
             wav = record_wav()
@@ -151,11 +160,11 @@ def main():
                 continue
             user_text = transcribe(wav)
             if not user_text:
-                print("🤔 Didn’t catch that.")
+                print("🤔 Didn't catch that.")
                 speak("I didn't catch that.")
                 continue
             print(f"👤 You: {user_text}")
-            reply = chat_llm(user_text)
+            reply = await process_user_input(user_text)
             print(f"🤖 Assistant: {reply}")
             speak(reply)
         except KeyboardInterrupt:
@@ -163,4 +172,4 @@ def main():
             break
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
