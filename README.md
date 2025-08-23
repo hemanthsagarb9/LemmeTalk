@@ -34,9 +34,11 @@ lemmtalk/
 
 ### 1. News Workflow
 **Triggers**: "news", "hacker news", "hn", "top articles", "news bulletin"
-- Reads top Hacker News articles like a news bulletin
-- Fetches real-time data from HN API
+- Fetches top 10 Hacker News articles with real-time data
+- Extracts article content for better understanding
+- Creates podcast-style summaries with engaging narration
 - Presents stories in natural, conversational format
+- Includes article scores and author information
 
 ### 2. Reminders Workflow
 **Triggers**: "reminder", "remind me", "add reminder", "todo", "task"
@@ -87,7 +89,7 @@ python voice_loop.py
 
 ### Example Commands
 
-- **"Read me the top news"** → Fetches and reads Hacker News articles
+- **"Read me the top news"** → Fetches top 10 HN articles with podcast-style summaries
 - **"Remind me to call mom tomorrow"** → Adds a reminder
 - **"What are my reminders?"** → Shows current reminders
 - **"Add milk and bread to my shopping list"** → Updates shopping list
