@@ -93,15 +93,30 @@ def transcribe(path: str) -> str:
     text = " ".join([seg.text for seg in segments]).strip()
     return text
 
+# Global conversation history
+conversation_history = [
+    {"role": "system", "content": "You are a friendly, conversational voice assistant. Respond naturally as if speaking to someone in person. Use conversational language, natural pauses (indicated by commas), and clear pronunciation. Keep responses concise but warm and engaging. Avoid overly technical jargon unless specifically asked. Use contractions like 'you're', 'I'm', 'that's' to sound more natural when spoken aloud."}
+]
+
 def chat_llm(user_text: str) -> str:
-    """Send text to LLM and get response."""
+    """Send text to LLM and get response with conversation history."""
     if not user_text: return ""
-    messages = [
-        {"role": "system", "content": "You are a friendly, conversational voice assistant. Respond naturally as if speaking to someone in person. Use conversational language, natural pauses (indicated by commas), and clear pronunciation. Keep responses concise but warm and engaging. Avoid overly technical jargon unless specifically asked. Use contractions like 'you're', 'I'm', 'that's' to sound more natural when spoken aloud."},
-        {"role": "user", "content": user_text}
-    ]
-    resp = client.chat.completions.create(model=OPENAI_MODEL, messages=messages)
-    return resp.choices[0].message.content.strip()
+    
+    # Add user message to history
+    conversation_history.append({"role": "user", "content": user_text})
+    
+    # Limit history to last 5 exchanges (10 messages + system message) to prevent token overflow
+    if len(conversation_history) > 11:  # system + 5 exchanges (10 messages)
+        # Keep system message and last 5 exchanges
+        conversation_history[:] = [conversation_history[0]] + conversation_history[-10:]
+    
+    resp = client.chat.completions.create(model=OPENAI_MODEL, messages=conversation_history)
+    assistant_response = resp.choices[0].message.content.strip()
+    
+    # Add assistant response to history
+    conversation_history.append({"role": "assistant", "content": assistant_response})
+    
+    return assistant_response
 
 def main():
     print("🎤 Local Voice Assistant ready. Ctrl+C to quit.")
