@@ -19,8 +19,14 @@ lemmtalk/
 │   ├── __init__.py        # Workflow management system
 │   ├── news_workflow.py   # Hacker News reader
 │   ├── reminders_workflow.py # Task management
-│   └── shopping_workflow.py # Shopping list
+│   ├── shopping_workflow.py # Shopping list
+│   └── weather_workflow.py # Weather information
 ├── tools/                 # Utility tools
+│   ├── __init__.py        # Tools package
+│   └── storage.py         # File storage system
+├── data/                  # Persistent data storage
+│   ├── shopping_list.json # Shopping list data
+│   └── reminders.json     # Reminders data
 └── config/               # Configuration
 ```
 
@@ -34,15 +40,21 @@ lemmtalk/
 
 ### 2. Reminders Workflow
 **Triggers**: "reminder", "remind me", "add reminder", "todo", "task"
-- Adds reminders and tasks
+- Adds reminders and tasks with persistent storage
 - Extracts timing information from natural language
 - Manages personal task list
+- View current reminders: "What are my reminders?"
+- Mark as completed: "Mark reminder X as done"
+- Clear completed reminders
 
 ### 3. Shopping Workflow
 **Triggers**: "shopping", "shopping list", "add to list", "buy", "grocery"
-- Manages shopping lists
+- Manages shopping lists with persistent storage
 - Adds items from voice commands
 - Organizes grocery items
+- View current list: "What's on my shopping list?"
+- Mark items completed: "Mark milk as bought"
+- Clear completed items
 
 ## Installation
 
@@ -77,7 +89,10 @@ python voice_loop.py
 
 - **"Read me the top news"** → Fetches and reads Hacker News articles
 - **"Remind me to call mom tomorrow"** → Adds a reminder
+- **"What are my reminders?"** → Shows current reminders
 - **"Add milk and bread to my shopping list"** → Updates shopping list
+- **"What's on my shopping list?"** → Shows current items
+- **"Mark milk as bought"** → Marks item as completed
 - **"What's the weather like?"** → General conversation (fallback)
 
 ## Adding New Workflows
